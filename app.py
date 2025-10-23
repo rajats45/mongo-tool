@@ -4,6 +4,11 @@ import shlex  # For safe command argument building
 from flask import Flask, render_template, jsonify, request, send_file, abort
 from werkzeug.utils import secure_filename 
 
+# --- CONFIGURATION ---
+# !! THIS IS THE ONLY PLACE YOU NEED TO CHANGE THE PASSWORD !!
+DB_PASSWORD = "e#dE92e935"
+# ---------------------
+
 # Get the absolute path of the directory where this script is
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
 UPLOAD_FOLDER = '/tmp' # We'll temporarily save uploads here
@@ -60,21 +65,20 @@ def backup():
     """Runs mongodump and sends the backup file for download."""
     backup_file = "/tmp/mongo_backup.gz"
     
-    # !! IMPORTANT: This password MUST match your docker-compose.yml
-    password = "YOUR_VERY_STRONG_PASSWORD_HERE" 
-    
     # Check if the compose file has the default password
     try:
         with open(os.path.join(PROJECT_DIR, 'docker-compose.yml'), 'r') as f:
-            if "YOUR_VERY_STRONG_PASSWORD_HERE" in f.read():
-                 return jsonify({"success": False, "error": "SECURITY RISK: Please change the default password in your docker-compose.yml file first."}), 400
+            # Uses the DB_PASSWORD variable
+            if DB_PASSWORD in f.read():
+                 return jsonify({"success": False, "error": "SECURITY RISK: Please change the default password in your docker-compose.yml and app.py files first."}), 400
     except FileNotFoundError:
         return jsonify({"success": False, "error": "docker-compose.yml not found."}), 500
 
     
     dump_command = (
         f"docker compose exec mongo mongodump "
-        f"--username=root --password={shlex.quote(password)} "
+        # Uses the DB_PASSWORD variable
+        f"--username=root --password={shlex.quote(DB_PASSWORD)} "
         f"--authenticationDatabase=admin "
         f"--archive={backup_file} --gzip"
     )
@@ -143,9 +147,6 @@ def restore():
         
         # Define the path *inside* the container
         container_temp_path = f"/tmp/{filename}"
-        
-        # !! IMPORTANT: This password MUST match your docker-compose.yml
-        password = "YOUR_VERY_STRONG_PASSWORD_HERE"
 
         # 1. Copy the file from the server into the container
         copy_command = f"docker cp {server_temp_path} my-mongo-db:{container_temp_path}"
@@ -156,7 +157,8 @@ def restore():
         # 2. Run the mongorestore command
         restore_command = (
             f"docker compose exec mongo mongorestore "
-            f"--username=root --password={shlex.quote(password)} "
+            # Uses the DB_PASSWORD variable
+            f"--username=root --password={shlex.quote(DB_PASSWORD)} "
             f"--authenticationDatabase=admin "
             f"--archive={container_temp_path} --gzip "
             f"--drop"  # <-- This will WIPE the database before restoring
@@ -171,7 +173,7 @@ def restore():
 
     return jsonify({"success": False, "error": "An unknown error occurred."}), 500
 
-# --- 7. ADD THIS NEW SECTION FOR STATUS ---
+# --- 7. Status Route ---
 @app.route('/status', methods=['GET'])
 def get_status():
     """Checks the status of the 'my-mongo-db' container."""
@@ -207,10 +209,11 @@ if __name__ == '__main__':
     # (The startup check is unchanged)
     try:
         with open(os.path.join(PROJECT_DIR, 'docker-compose.yml'), 'r') as f:
-            if "YOUR_VERY_STRONG_PASSWORD_HERE" in f.read():
+            # Uses the DB_PASSWORD variable
+            if DB_PASSWORD in f.read():
                 print("="*60)
                 print("WARNING: You are using the default password.")
-                print("Please edit 'docker-compose.yml' and 'app.py' to set a secure password.")
+                print("Please edit 'docker-compose.yml' and the top of 'app.py' to set a secure password.")
                 print("="*60)
     except FileNotFoundError:
         print("Warning: docker-compose.yml not found. Cannot check for default password.")
