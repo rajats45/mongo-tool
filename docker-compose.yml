@@ -1,0 +1,17 @@
+services:
+  mongo:
+    image: mongo:latest
+    container_name: my-mongo-db
+    restart: always
+    ports:
+      - "27017:27017"
+    environment:
+      # !! IMPORTANT: CHANGE THIS PASSWORD !!
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: YOUR_VERY_STRONG_PASSWORD_HERE
+    volumes:
+      # This line ensures your data is saved
+      - mongo-data:/data/db
+
+volumes:
+  mongo-data:
