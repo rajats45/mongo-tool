@@ -89,12 +89,9 @@
         const outputBox = document.getElementById('output');
         const restoreForm = document.getElementById('restore-form');
         const fileInput = document.getElementById('file-input');
-        
-        // --- ADD THIS ---
         const statusIndicator = document.getElementById('status-indicator');
-        // --- END ADD ---
 
-        // (showOutput and showMessage functions are unchanged)
+        // Helper function to show formatted output
         function showOutput(data) {
             if (data.success) {
                 outputBox.classList.remove('error');
@@ -106,6 +103,8 @@
                 outputBox.textContent = `ERROR:\n${data.error}\n\n(Server Output):\n${data.output || ''}`;
             }
         }
+        
+        // Helper function to show a simple message
         function showMessage(message, isError = false) {
             if (isError) {
                 outputBox.classList.remove('success');
@@ -117,40 +116,114 @@
             outputBox.textContent = message;
         }
 
-        // (Deploy/Update button is unchanged, but we'll add checkStatus())
+        // --- 1. Deploy / Update ---
         deployBtn.addEventListener('click', async () => {
             showMessage("Deploying / Updating...", false);
             try {
                 const response = await fetch('/deploy', { method: 'POST' });
                 const data = await response.json();
                 showOutput(data);
-                checkStatus(); // <-- ADD THIS
+                checkStatus(); 
             } catch (err) {
                 showMessage(`Network error: ${err.message}`, true);
-                checkStatus(); // <-- ADD THIS
+                checkStatus(); 
             }
         });
 
-        // (Backup button is unchanged)
+        // --- 2. Backup ---
         backupBtn.addEventListener('click', async (e) => {
-            // ... (existing code) ...
+            showMessage("Generating backup... Please wait.", false);
+            e.target.disabled = true; // Disable button to prevent double click
+            try {
+                const response = await fetch('/backup', { method: 'POST' });
+
+                if (response.ok && response.headers.get('Content-Type') === 'application/gzip') {
+                    // Handle file download
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.style.display = 'none';
+                    a.href = url;
+                    // Get filename from header or use default
+                    const filename = response.headers.get('Content-Disposition')?.split('filename=')[1] || 'mongo_backup.gz';
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    a.remove();
+                    showMessage("Backup downloaded successfully.", false);
+                } else {
+                    // Handle JSON error response
+                    const errorData = await response.json();
+                    showOutput(errorData);
+                }
+            } catch (err) {
+                showMessage(`Network error: ${err.message}`, true);
+            } finally {
+                e.target.disabled = false; // Re-enable button
+            }
         });
 
-        // (Logs button is unchanged)
+        // --- 3. Logs ---
         logsBtn.addEventListener('click', async () => {
-            // ... (existing code) ...
+            showMessage("Fetching logs...", false);
+            try {
+                const response = await fetch('/logs', { method: 'GET' });
+                const data = await response.json();
+                showOutput(data);
+            } catch (err) {
+                showMessage(`Network error: ${err.message}`, true);
+            }
         });
 
-        // (Add Firewall Rule button is unchanged)
+        // --- 4. Add Firewall Rule (FIXED) ---
         addRuleBtn.addEventListener('click', async () => {
-            // ... (existing code) ...
+            const ip = ipInput.value.trim(); // Get the IP from the text box
+
+            if (!ip) {
+                showMessage("Please enter an IP address.", true);
+                return;
+            }
+
+            showMessage(`Adding rule for ${ip}...`, false); // Show a loading message
+
+            try {
+                const response = await fetch('/add-rule', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json', // Tell the server we're sending JSON
+                    },
+                    body: JSON.stringify({ ip: ip }) // Send the IP in the correct JSON format
+                });
+                
+                const data = await response.json();
+                showOutput(data); // Use your helper function to show the result
+
+                // If the rule was added successfully, clear the input box
+                if (data.success) {
+                    ipInput.value = '';
+                }
+
+            } catch (err) {
+                showMessage(`Network error: ${err.message}`, true);
+            }
         });
         
-        // (Restore form is unchanged, but we'll add checkStatus())
+        // --- 5. Restore ---
         restoreForm.addEventListener('submit', async (e) => {
             e.preventDefault(); 
-            // ... (existing code for confirm()) ...
             
+            if (fileInput.files.length === 0) {
+                showMessage("Please select a .gz backup file to restore.", true);
+                return;
+            }
+            
+            // Add a confirmation dialog
+            const confirmation = confirm("WARNING: This will WIPE the current database and replace it with the backup. Are you sure you want to continue?");
+            if (!confirmation) {
+                return;
+            }
+
             showMessage("Uploading and restoring... This may take a moment.", false);
             
             const formData = new FormData();
@@ -167,15 +240,15 @@
                     showMessage("SUCCESS: Database restored.\n\n" + data.output, false);
                 }
                 fileInput.value = ''; 
-                checkStatus(); // <-- ADD THIS
+                checkStatus(); 
             } catch (err) {
                 showMessage(`Network error: ${err.message}`, true);
-                checkStatus(); // <-- ADD THIS
+                checkStatus(); 
             }
         });
         
         
-        // --- ADD THIS NEW STATUS CHECKING FUNCTION ---
+        // --- 6. Status Checking Function ---
         async function checkStatus() {
             try {
                 const response = await fetch('/status');
@@ -231,7 +304,6 @@
             checkStatus(); // Check immediately
             setInterval(checkStatus, 5000); // Check every 5 seconds
         });
-        // --- END NEW STATUS CHECKING FUNCTION ---
         
     </script>
 </body>
