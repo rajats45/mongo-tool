@@ -6,7 +6,7 @@ from werkzeug.utils import secure_filename
 
 # --- CONFIGURATION ---
 # !! THIS IS THE ONLY PLACE YOU NEED TO CHANGE THE PASSWORD !!
-DB_PASSWORD = "e#dE92e935"
+DB_PASSWORD = "dE92e935"
 # ---------------------
 
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
