@@ -2,11 +2,14 @@ import subprocess
 import os
 import shlex  # For safe command argument building
 from flask import Flask, render_template, jsonify, request, send_file, abort
+from werkzeug.utils import secure_filename # --- ADD THIS ---
 
 # Get the absolute path of the directory where this script is
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_FOLDER = '/tmp' # We'll temporarily save uploads here
 
 app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 
 # --- Helper Function ---
 def run_command(command, get_output=False):
@@ -57,8 +60,7 @@ def backup():
     """Runs mongodump and sends the backup file for download."""
     backup_file = "/tmp/mongo_backup.gz"
     
-    # !! IMPORTANT: CHANGE THIS PASSWORD !!
-    # This must match the password in your docker-compose.yml
+    # !! IMPORTANT: This password MUST match your docker-compose.yml
     password = "YOUR_VERY_STRONG_PASSWORD_HERE" 
     
     # Check if the compose file has the default password
@@ -120,9 +122,59 @@ def add_rule():
     result = run_command(command)
     return jsonify(result)
 
+
+# --- 6. ADD THIS NEW SECTION for Restore ---
+@app.route('/restore', methods=['POST'])
+def restore():
+    """Receives an uploaded backup file and restores it."""
+    if 'backupFile' not in request.files:
+        return jsonify({"success": False, "error": "No file part in request."}), 400
+    
+    file = request.files['backupFile']
+    
+    if file.filename == '':
+        return jsonify({"success": False, "error": "No file selected."}), 400
+
+    if file:
+        # Save the uploaded file temporarily on the server
+        filename = secure_filename(file.filename)
+        server_temp_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(server_temp_path)
+        
+        # Define the path *inside* the container
+        container_temp_path = f"/tmp/{filename}"
+        
+        # !! IMPORTANT: This password MUST match your docker-compose.yml
+        password = "YOUR_VERY_STRONG_PASSWORD_HERE"
+
+        # 1. Copy the file from the server into the container
+        copy_command = f"docker cp {server_temp_path} my-mongo-db:{container_temp_path}"
+        copy_result = run_command(copy_command)
+        if not copy_result["success"]:
+            return jsonify(copy_result), 500
+
+        # 2. Run the mongorestore command
+        restore_command = (
+            f"docker compose exec mongo mongorestore "
+            f"--username=root --password={shlex.quote(password)} "
+            f"--authenticationDatabase=admin "
+            f"--archive={container_temp_path} --gzip "
+            f"--drop"  # <-- This will WIPE the database before restoring
+        )
+        restore_result = run_command(restore_command)
+        
+        # 3. Clean up the temporary files
+        run_command(f"rm {server_temp_path}") # Clean server
+        run_command(f"docker compose exec mongo rm {container_temp_path}") # Clean container
+        
+        return jsonify(restore_result)
+
+    return jsonify({"success": False, "error": "An unknown error occurred."}), 500
+
+
 # --- Run the App ---
 if __name__ == '__main__':
-    # Check if default password is still in compose file
+    # (The startup check is unchanged)
     try:
         with open(os.path.join(PROJECT_DIR, 'docker-compose.yml'), 'r') as f:
             if "YOUR_VERY_STRONG_PASSWORD_HERE" in f.read():
@@ -133,6 +185,4 @@ if __name__ == '__main__':
     except FileNotFoundError:
         print("Warning: docker-compose.yml not found. Cannot check for default password.")
 
-    # Host=0.0.0.0 makes it accessible from your server's public IP
-    # debug=False is safer for a "production" tool
     app.run(host='0.0.0.0', port=5000, debug=False)
