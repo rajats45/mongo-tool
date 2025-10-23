@@ -8,7 +8,7 @@ services:
     environment:
       # !! IMPORTANT: CHANGE THIS PASSWORD !!
       MONGO_INITDB_ROOT_USERNAME: root
-      MONGO_INITDB_ROOT_PASSWORD: YOUR_VERY_STRONG_PASSWORD_HERE
+      MONGO_INITDB_ROOT_PASSWORD: manish#123
     volumes:
       # This line ensures your data is saved
       - mongo-data:/data/db

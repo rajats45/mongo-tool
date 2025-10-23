@@ -9,7 +9,7 @@ fi
 
 # --- Configuration ---
 # !! CHANGE THIS LINE to your GitHub repo's URL !!
-REPO_URL="https://github.com/rajats45/mongo-tool.git"
+REPO_URL="https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git"
 
 # Get the non-sudo user who ran the command
 REAL_USER="${SUDO_USER:-$(whoami)}"
@@ -20,9 +20,10 @@ INSTALL_DIR="/opt/mongo-tool"
 echo "--- Starting MongoDB Tool Installer ---"
 
 # 1. Install Dependencies
-echo "[1/5] Installing dependencies (git, python3-pip, ufw, docker)..."
+echo "[1/5] Installing dependencies (git, python3, venv, ufw, docker)..."
 apt-get update > /dev/null
-apt-get install -y git python3-pip ufw ca-certificates curl > /dev/null
+# Add python3-venv for the virtual environment
+apt-get install -y git python3-pip python3-venv ufw ca-certificates curl > /dev/null
 
 # Install Docker (if not already present)
 if ! command -v docker &> /dev/null; then
@@ -41,8 +42,6 @@ if ! command -v docker &> /dev/null; then
     echo "   > Docker installed."
 fi
 
-pip install Flask > /dev/null
-
 # 2. Clone the Repository
 echo "[2/5] Cloning project from GitHub..."
 if [ -d "$INSTALL_DIR" ]; then
@@ -53,15 +52,23 @@ else
 fi
 chown -R "$REAL_USER":"$REAL_USER" "$INSTALL_DIR"
 
-# 3. Set up UFW Permission
-echo "[3/5] Setting up Sudo permissions for UFW..."
+# 3. Create Python Virtual Environment
+echo "[3/5] Creating Python virtual environment..."
+python3 -m venv "$INSTALL_DIR/venv"
+# Install Flask INSIDE the venv
+"$INSTALL_DIR/venv/bin/pip" install Flask
+chown -R "$REAL_USER":"$REAL_USER" "$INSTALL_DIR/venv"
+echo "   > Flask installed in isolated venv."
+
+# 4. Set up UFW Permission
+echo "[4/5] Setting up Sudo permissions for UFW..."
 # Create a new file in /etc/sudoers.d/
 echo "$REAL_USER ALL=(ALL) NOPASSWD: /usr/sbin/ufw" > /etc/sudoers.d/90-mongo-tool
 chmod 0440 /etc/sudoers.d/90-mongo-tool
 echo "   > UFW is now controllable by the app."
 
-# 4. Create the 'mongo-tool' command
-echo "[4/5] Creating 'mongo-tool' command..."
+# 5. Create the 'mongo-tool' command
+echo "[5/5] Creating 'mongo-tool' command..."
 
 # Create a small script to start the server
 cat << EOF > "$INSTALL_DIR/start.sh"
@@ -77,7 +84,11 @@ if ! groups $USER | grep &>/dev/null '\\bdocker\\b'; then
     exit 1
 fi
 
+# Activate the virtual environment
+source "$INSTALL_DIR/venv/bin/activate"
+
 cd "$INSTALL_DIR"
+# Run the app using the venv's python
 python3 app.py
 EOF
 
@@ -89,8 +100,7 @@ if [ -f "/usr/local/bin/mongo-tool" ]; then
 fi
 ln -s "$INSTALL_DIR/start.sh" /usr/local/bin/mongo-tool
 
-# 5. Final Instructions
-echo "[5/5] Installation Complete!"
+echo "--- Installation Complete! ---"
 echo ""
 echo "--- To Use Your Tool ---"
 echo "1. IMPORTANT: Edit your password in: $INSTALL_DIR/docker-compose.yml"
