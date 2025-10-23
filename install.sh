@@ -9,7 +9,7 @@ fi
 
 # --- Configuration ---
 # !! CHANGE THIS LINE to your GitHub repo's URL !!
-REPO_URL="https://github.com/YOUR_USERNAME/YOUR_REPO_NAME.git"
+REPO_URL="https://github.com/rajats45/mongo-tool.git"
 
 # Get the non-sudo user who ran the command
 REAL_USER="${SUDO_USER:-$(whoami)}"
