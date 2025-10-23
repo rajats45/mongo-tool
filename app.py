@@ -2,7 +2,7 @@ import subprocess
 import os
 import shlex  # For safe command argument building
 from flask import Flask, render_template, jsonify, request, send_file, abort
-from werkzeug.utils import secure_filename # --- ADD THIS ---
+from werkzeug.utils import secure_filename 
 
 # Get the absolute path of the directory where this script is
 PROJECT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -123,7 +123,7 @@ def add_rule():
     return jsonify(result)
 
 
-# --- 6. ADD THIS NEW SECTION for Restore ---
+# --- 6. Restore Route ---
 @app.route('/restore', methods=['POST'])
 def restore():
     """Receives an uploaded backup file and restores it."""
@@ -171,6 +171,36 @@ def restore():
 
     return jsonify({"success": False, "error": "An unknown error occurred."}), 500
 
+# --- 7. ADD THIS NEW SECTION FOR STATUS ---
+@app.route('/status', methods=['GET'])
+def get_status():
+    """Checks the status of the 'my-mongo-db' container."""
+    
+    # This command inspects the container and gets its state.
+    # --format '{{.State.Status}}' prints *only* the status (e.g., "running", "exited")
+    command = "docker inspect --format '{{.State.Status}}' my-mongo-db"
+    
+    try:
+        # We need to capture the output
+        result = subprocess.run(
+            command,
+            shell=True,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        # .strip() removes any trailing newlines
+        status = result.stdout.strip()
+        return jsonify({"success": True, "status": status})
+    
+    except subprocess.CalledProcessError as e:
+        # This error usually means the container doesn't exist yet
+        if "No such object" in e.stderr:
+            return jsonify({"success": True, "status": "not_deployed"})
+        else:
+            return jsonify({"success": False, "status": "error", "error": e.stderr})
+    except Exception as e:
+        return jsonify({"success": False, "status": "error", "error": str(e)})
 
 # --- Run the App ---
 if __name__ == '__main__':
